@@ -91,6 +91,8 @@ window.FLOW_I18N = {
     flowListen: "先听真人原声",
     flowShadow: "再完整跟读",
     flowLink: "最后拆解连读",
+    introTagline: "从声音进入英语",
+    introSkip: "跳过动画",
     defaultRuleName: "句子重音与意群",
     defaultRuleTip: "把信息词读得更清楚，把功能词压短；按意义分组，而不是每个单词都停顿。"
   },
@@ -186,6 +188,8 @@ window.FLOW_I18N = {
     flowListen: "Hear the real voice",
     flowShadow: "Shadow the full phrase",
     flowLink: "Break down the linking",
+    introTagline: "Enter English through sound",
+    introSkip: "Skip animation",
     defaultRuleName: "Sentence stress and thought groups",
     defaultRuleTip: "Make content words clearer, shorten function words, and pause by meaning rather than after every word."
   },
@@ -281,6 +285,8 @@ window.FLOW_I18N = {
     flowListen: "Ouvir a voz real",
     flowShadow: "Repetir a frase inteira",
     flowLink: "Separar as ligações",
+    introTagline: "Entre no inglês pelo som",
+    introSkip: "Pular animação",
     defaultRuleName: "Acento frasal e grupos de sentido",
     defaultRuleTip: "Destaque as palavras de conteúdo, reduza as palavras funcionais e faça pausas pelo sentido, não após cada palavra."
   },
@@ -376,6 +382,8 @@ window.FLOW_I18N = {
     flowListen: "実際の音声を聞く",
     flowShadow: "文全体をまねして話す",
     flowLink: "音のつながりを分解する",
+    introTagline: "音から英語へ入ろう",
+    introSkip: "アニメーションをスキップ",
     defaultRuleName: "文の強勢と意味のまとまり",
     defaultRuleTip: "内容語を明確に、機能語を短く発音し、単語ごとではなく意味のまとまりで区切ります。"
   },
@@ -471,6 +479,8 @@ window.FLOW_I18N = {
     flowListen: "실제 음성 듣기",
     flowShadow: "문장 전체 따라 읽기",
     flowLink: "연음 분해하기",
+    introTagline: "소리로 영어에 들어가세요",
+    introSkip: "애니메이션 건너뛰기",
     defaultRuleName: "문장 강세와 의미 단위",
     defaultRuleTip: "내용어는 더 분명하게, 기능어는 짧게 말하고 단어마다가 아니라 의미 단위로 끊어 읽으세요."
   }

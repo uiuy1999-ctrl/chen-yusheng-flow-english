@@ -18,7 +18,7 @@
     ja: "translations-ja.js",
     ko: "translations-ko.js"
   };
-  const assetRevision = "20260712-8000";
+  const assetRevision = "20260712-intro";
   const translationLoads = {};
 
   const normalizeLocale = value => {
@@ -644,6 +644,24 @@
     $("languageSelect").value = locale;
   }
 
+  function initIntro() {
+    const intro = $("intro");
+    if (!intro) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      intro.remove();
+      return;
+    }
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      intro.classList.add("leave");
+      window.setTimeout(() => intro.remove(), 560);
+    };
+    $("skipIntro").onclick = finish;
+    window.setTimeout(finish, 1900);
+  }
+
   async function applyLocale(nextLocale) {
     locale = supportedLocales.includes(nextLocale) ? nextLocale : "en";
     $("languageSelect").disabled = true;
@@ -729,6 +747,7 @@
   $("totalMetric").textContent = number(library.length);
   await ensureTranslations(locale);
   localizeStatic();
+  initIntro();
   renderFilters();
   renderScenes();
   renderRules();
