@@ -124,6 +124,20 @@
   let query = "";
   let index = 0;
   let blind = false;
+  let currentItem = null;
+  let mediaRecorder = null;
+  let mediaStream = null;
+  let speechRecognition = null;
+  let recordedAudioUrl = "";
+  let recordedChunks = [];
+  let recognisedText = "";
+  let recognitionEnded = true;
+  let recorderEnded = true;
+  let shadowActive = false;
+  let shadowStopping = false;
+  let recognitionAvailable = false;
+  let shadowSession = 0;
+  let shadowPlayback = null;
 
   const matches = item => {
     const itemZone = itemZones.get(String(item.id));
@@ -263,15 +277,226 @@
     }
   }
 
-  function renderSentenceRules(text) {
+  function sentenceRulesFor(text) {
     const found = [];
     for (const rule of connectedRules) {
       const match = text.match(rule.re);
-      if (match) found.push({ name: ruleName(rule.key), tip: ruleTip(rule.key, rule.values(match)), ipa: rule.ipa(match) });
+      if (match) found.push({ key: rule.key, name: ruleName(rule.key), tip: ruleTip(rule.key, rule.values(match)), ipa: rule.ipa(match), phrase: match[0] });
       if (found.length === 4) break;
     }
-    if (!found.length) found.push({ name: t("defaultRuleName"), tip: t("defaultRuleTip"), ipa: "CONTENT words > function words" });
+    if (!found.length) found.push({ key: "sentenceStress", name: t("defaultRuleName"), tip: t("defaultRuleTip"), ipa: "CONTENT words > function words", phrase: text });
+    return found;
+  }
+
+  function renderSentenceRules(text) {
+    const found = sentenceRulesFor(text);
     $("sentenceRules").innerHTML = found.map(item => `<div class="sentence-rule"><b>${esc(item.name)}</b><span>${esc(item.tip)}<code>${esc(item.ipa)}</code></span></div>`).join("");
+  }
+
+  const tokenize = text => String(text || "").toLowerCase().replace(/[^a-z'\s]/g, " ").split(/\s+/).filter(Boolean);
+
+  function matchedTokenIndexes(expected, heard) {
+    const rows = expected.length + 1;
+    const columns = heard.length + 1;
+    const table = Array.from({ length: rows }, () => Array(columns).fill(0));
+    for (let expectedIndex = 1; expectedIndex < rows; expectedIndex += 1) {
+      for (let heardIndex = 1; heardIndex < columns; heardIndex += 1) {
+        table[expectedIndex][heardIndex] = expected[expectedIndex - 1] === heard[heardIndex - 1]
+          ? table[expectedIndex - 1][heardIndex - 1] + 1
+          : Math.max(table[expectedIndex - 1][heardIndex], table[expectedIndex][heardIndex - 1]);
+      }
+    }
+    const matched = new Set();
+    let expectedIndex = expected.length;
+    let heardIndex = heard.length;
+    while (expectedIndex > 0 && heardIndex > 0) {
+      if (expected[expectedIndex - 1] === heard[heardIndex - 1]) {
+        matched.add(expectedIndex - 1);
+        expectedIndex -= 1;
+        heardIndex -= 1;
+      } else if (table[expectedIndex - 1][heardIndex] >= table[expectedIndex][heardIndex - 1]) {
+        expectedIndex -= 1;
+      } else {
+        heardIndex -= 1;
+      }
+    }
+    return matched;
+  }
+
+  function splitPhrase(phrase) {
+    const words = String(phrase || "").trim().split(/\s+/).filter(Boolean);
+    return words.length > 1 ? words.join(" | ") : (words[0] || "—");
+  }
+
+  function renderSplitTeaching(rules) {
+    return `<div class="split-title">${esc(t("linkedTeaching"))}</div>${rules.map(rule => `<article class="split-card"><b>${esc(rule.name)}</b><p>${esc(rule.tip)}</p><div class="split-steps"><div class="split-step"><em>1. ${esc(t("splitClear"))}</em><code>${esc(splitPhrase(rule.phrase))}</code></div><div class="split-step"><em>2. ${esc(t("splitLinked"))}</em><code>${esc(rule.phrase)}</code></div><div class="split-step"><em>3. ${esc(t("splitBack"))}</em><code>${esc(rule.ipa)}</code></div></div><button class="slow-play" type="button" data-slow-play="true">${esc(t("playSlow"))}</button></article>`).join("")}`;
+  }
+
+  function bindSlowPlayback() {
+    document.querySelectorAll("[data-slow-play]").forEach(button => {
+      button.onclick = () => {
+        const audio = $("audio");
+        $("speed").value = "0.35";
+        audio.playbackRate = 0.35;
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      };
+    });
+  }
+
+  function renderShadowFeedback() {
+    const target = currentItem?.e || "";
+    const rules = sentenceRulesFor(target);
+    const result = $("shadowResult");
+    result.hidden = false;
+    if (!recognitionAvailable) {
+      result.innerHTML = `<div class="shadow-summary"><div class="coverage-score">—</div><div><h4>${esc(t("speechUnavailable"))}</h4><p>${esc(t("recordingReady"))}</p></div></div>${renderSplitTeaching(rules.slice(0, 3))}`;
+      bindSlowPlayback();
+      return;
+    }
+    if (!recognisedText.trim()) {
+      result.innerHTML = `<div class="shadow-summary"><div class="coverage-score">—</div><div><h4>${esc(t("noSpeech"))}</h4><p>${esc(t("coverageNote"))}</p></div></div>${renderSplitTeaching(rules.slice(0, 3))}`;
+      bindSlowPlayback();
+      return;
+    }
+    const expected = tokenize(target);
+    const heard = tokenize(recognisedText);
+    const matched = matchedTokenIndexes(expected, heard);
+    const coverage = expected.length ? Math.round((matched.size / expected.length) * 100) : 0;
+    const missed = expected.filter((word, wordIndex) => !matched.has(wordIndex));
+    const priorityRules = [...rules].sort((first, second) => {
+      const firstMisses = tokenize(first.phrase).filter(word => missed.includes(word)).length;
+      const secondMisses = tokenize(second.phrase).filter(word => missed.includes(word)).length;
+      return secondMisses - firstMisses;
+    }).slice(0, 3);
+    result.innerHTML = `<div class="shadow-summary"><div class="coverage-score">${coverage}%</div><div><h4>${esc(t("coverage"))}</h4><p>${esc(t("coverageNote"))}</p></div></div><div class="recognised-text"><b>${esc(t("recognitionResult"))}</b><br>${esc(recognisedText)}</div>${missed.length ? `<div class="missed"><b>${esc(t("missedWords"))}：</b>${esc(missed.slice(0, 10).join(" · "))}</div>` : ""}${renderSplitTeaching(priorityRules)}`;
+    bindSlowPlayback();
+  }
+
+  function stopMediaTracks() {
+    if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
+  }
+
+  function resetShadowPractice() {
+    shadowSession += 1;
+    if (shadowPlayback) shadowPlayback.pause();
+    shadowPlayback = null;
+    if (shadowActive) {
+      shadowActive = false;
+      shadowStopping = false;
+      if (mediaRecorder?.state !== "inactive") mediaRecorder.stop();
+      if (speechRecognition && !recognitionEnded) {
+        try { speechRecognition.stop(); } catch (_) {}
+      }
+      stopMediaTracks();
+    }
+    if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+    recordedAudioUrl = "";
+    recognisedText = "";
+    recognitionAvailable = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+    $("playShadow").hidden = true;
+    $("shadowResult").hidden = true;
+    $("shadowResult").innerHTML = "";
+    $("startShadow").disabled = false;
+    $("stopShadow").disabled = true;
+    $("shadowStatus").textContent = t("shadowIdle");
+  }
+
+  function maybeFinishShadowAnalysis() {
+    if (!shadowStopping || !recorderEnded || !recognitionEnded) return;
+    shadowStopping = false;
+    $("startShadow").disabled = false;
+    $("stopShadow").disabled = true;
+    $("shadowStatus").textContent = t("recordingReady");
+    renderShadowFeedback();
+  }
+
+  async function startShadowPractice() {
+    if (shadowActive || !currentItem) return;
+    resetShadowPractice();
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      $("shadowStatus").textContent = t("micDenied");
+      return;
+    }
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (_) {
+      $("shadowStatus").textContent = t("micDenied");
+      return;
+    }
+    recordedChunks = [];
+    recognisedText = "";
+    recorderEnded = false;
+    recognitionEnded = true;
+    shadowActive = true;
+    shadowStopping = false;
+    const session = shadowSession;
+    mediaRecorder = new MediaRecorder(mediaStream);
+    mediaRecorder.ondataavailable = event => { if (session === shadowSession && event.data.size) recordedChunks.push(event.data); };
+    mediaRecorder.onstop = () => {
+      if (session !== shadowSession) return;
+      recorderEnded = true;
+      stopMediaTracks();
+      if (recordedChunks.length) {
+        const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+        recordedAudioUrl = URL.createObjectURL(blob);
+        $("playShadow").hidden = false;
+      }
+      maybeFinishShadowAnalysis();
+    };
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognitionAvailable = Boolean(SpeechRecognition);
+    if (SpeechRecognition) {
+      speechRecognition = new SpeechRecognition();
+      speechRecognition.lang = "en-US";
+      speechRecognition.continuous = true;
+      speechRecognition.interimResults = true;
+      speechRecognition.maxAlternatives = 1;
+      recognitionEnded = false;
+      speechRecognition.onresult = event => {
+        if (session !== shadowSession) return;
+        let liveText = "";
+        for (let resultIndex = event.resultIndex; resultIndex < event.results.length; resultIndex += 1) {
+          const text = event.results[resultIndex][0].transcript;
+          if (event.results[resultIndex].isFinal) recognisedText += `${text} `;
+          else liveText += text;
+        }
+        const heard = `${recognisedText} ${liveText}`.trim();
+        $("shadowStatus").textContent = heard ? `${t("shadowRecording")} ${heard}` : t("shadowRecording");
+      };
+      speechRecognition.onerror = event => {
+        if (session !== shadowSession) return;
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") $("shadowStatus").textContent = t("micDenied");
+      };
+      speechRecognition.onend = () => {
+        if (session !== shadowSession) return;
+        recognitionEnded = true;
+        maybeFinishShadowAnalysis();
+      };
+      try { speechRecognition.start(); }
+      catch (_) { recognitionAvailable = false; recognitionEnded = true; }
+    }
+    mediaRecorder.start();
+    $("startShadow").disabled = true;
+    $("stopShadow").disabled = false;
+    $("shadowStatus").textContent = recognitionAvailable ? t("shadowRecording") : t("speechUnavailable");
+  }
+
+  function stopShadowPractice() {
+    if (!shadowActive) return;
+    shadowActive = false;
+    shadowStopping = true;
+    $("stopShadow").disabled = true;
+    $("shadowStatus").textContent = t("shadowAnalyzing");
+    if (mediaRecorder?.state !== "inactive") mediaRecorder.stop();
+    else recorderEnded = true;
+    if (speechRecognition && !recognitionEnded) {
+      try { speechRecognition.stop(); }
+      catch (_) { recognitionEnded = true; }
+    }
+    maybeFinishShadowAnalysis();
   }
 
   function render() {
@@ -282,6 +507,8 @@
       : t("statusReady", { zone: visibleZone, count: number(items.length) });
 
     if (!items.length) {
+      currentItem = null;
+      resetShadowPractice();
       $("audio").pause();
       $("category").textContent = t("noResultsTitle");
       $("phrase").textContent = t("noResultsHint");
@@ -292,6 +519,8 @@
     }
 
     const item = items[index % items.length];
+    currentItem = item;
+    resetShadowPractice();
     const audio = $("audio");
     audio.pause();
     audio.loop = false;
@@ -390,6 +619,14 @@
   $("clear").onclick = () => { $("search").value = ""; query = ""; index = 0; render(); };
   $("next").onclick = () => { const items = pool(); if (items.length) { index = (index + 1) % items.length; render(); } };
   $("blind").onclick = () => setBlind(!blind);
+  $("startShadow").onclick = () => startShadowPractice();
+  $("stopShadow").onclick = () => stopShadowPractice();
+  $("playShadow").onclick = () => {
+    if (!recordedAudioUrl) return;
+    if (shadowPlayback) shadowPlayback.pause();
+    shadowPlayback = new Audio(recordedAudioUrl);
+    shadowPlayback.play().catch(() => {});
+  };
   $("speed").onchange = () => { $("audio").playbackRate = Number($("speed").value); };
   $("loop").onclick = () => {
     const audio = $("audio");
