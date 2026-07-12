@@ -18,6 +18,7 @@
     ja: "translations-ja.js",
     ko: "translations-ko.js"
   };
+  const assetRevision = "20260712-8000";
   const translationLoads = {};
 
   const normalizeLocale = value => {
@@ -55,7 +56,7 @@
     if (translationLoads[targetLocale]) return translationLoads[targetLocale];
     translationLoads[targetLocale] = new Promise(resolve => {
       const script = document.createElement("script");
-      script.src = file;
+      script.src = `${file}?v=${assetRevision}`;
       script.dataset.flowLocale = targetLocale;
       script.onload = resolve;
       script.onerror = resolve;
@@ -318,6 +319,11 @@
     ["phrase", "translation", "chunks"].forEach(id => $(id).classList.toggle("hidden-text", blind));
   }
 
+  function setFlowStage(stage) {
+    const stageId = { listen: "flowListen", shadow: "flowShadow", link: "flowLink" }[stage];
+    document.querySelectorAll(".flow-node").forEach(button => button.classList.toggle("active", button.id === stageId));
+  }
+
   function warm(items) {
     if (!items.length) return;
     const next = items[(index + 1) % items.length];
@@ -400,6 +406,7 @@
     const target = currentItem?.e || "";
     const rules = sentenceRulesFor(target);
     const result = $("shadowResult");
+    setFlowStage("link");
     result.hidden = false;
     if (!recognitionAvailable) {
       result.innerHTML = `<div class="shadow-summary"><div class="coverage-score">—</div><div><h4>${esc(t("speechUnavailable"))}</h4><p>${esc(t("recordingReady"))}</p></div></div>${renderSplitTeaching(rules.slice(0, 3))}`;
@@ -466,6 +473,7 @@
 
   async function startShadowPractice() {
     if (shadowActive || !currentItem) return;
+    setFlowStage("shadow");
     resetShadowPractice();
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       $("shadowStatus").textContent = t("micDenied");
@@ -585,6 +593,7 @@
     $("translation").textContent = meaningFor(item);
     $("chunks").innerHTML = chunks(item.e).map(value => `<span>${esc(value)}</span>`).join("");
     renderSentenceRules(item.e);
+    setFlowStage("listen");
     $("note").textContent = t("trainingNote");
     $("attribution").textContent = t("audioAttribution", { user: item.user, license: item.license });
     $("license").href = item.attribution;
@@ -673,6 +682,20 @@
   $("clear").onclick = () => { $("search").value = ""; query = ""; index = 0; render(); };
   $("next").onclick = () => { const items = pool(); if (items.length) { index = (index + 1) % items.length; render(); } };
   $("blind").onclick = () => setBlind(!blind);
+  $("flowListen").onclick = () => {
+    setFlowStage("listen");
+    $("audio").currentTime = 0;
+    $("audio").play().catch(() => {});
+  };
+  $("flowShadow").onclick = () => {
+    setFlowStage("shadow");
+    $("shadowPractice").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("startShadow").focus();
+  };
+  $("flowLink").onclick = () => {
+    setFlowStage("link");
+    document.querySelector(".sentence-teaching").scrollIntoView({ behavior: "smooth", block: "center" });
+  };
   $("toggleCatalog").onclick = () => {
     catalogOpen = !catalogOpen;
     catalogLimit = 60;
@@ -699,6 +722,7 @@
     $("loop").textContent = t(audio.loop ? "loopOn" : "loopOff");
   };
   $("audio").oncanplay = () => { $("buffer").textContent = t("ready"); };
+  $("audio").onplay = () => setFlowStage("listen");
   $("audio").onwaiting = () => { $("buffer").textContent = t("buffering"); };
   $("audio").onerror = () => { $("buffer").textContent = t("slowLoad"); };
 

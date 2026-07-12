@@ -87,6 +87,10 @@ window.FLOW_I18N = {
     showMore: "显示更多（还剩 {count} 句）",
     allShown: "已显示全部 {count} 句",
     directoryRank: "实用性 #{rank}",
+    flowTitle: "本句语流路径",
+    flowListen: "先听真人原声",
+    flowShadow: "再完整跟读",
+    flowLink: "最后拆解连读",
     defaultRuleName: "句子重音与意群",
     defaultRuleTip: "把信息词读得更清楚，把功能词压短；按意义分组，而不是每个单词都停顿。"
   },
@@ -178,6 +182,10 @@ window.FLOW_I18N = {
     showMore: "Show more ({count} remaining)",
     allShown: "All {count} sentences are shown",
     directoryRank: "Usefulness #{rank}",
+    flowTitle: "Speech-flow path for this sentence",
+    flowListen: "Hear the real voice",
+    flowShadow: "Shadow the full phrase",
+    flowLink: "Break down the linking",
     defaultRuleName: "Sentence stress and thought groups",
     defaultRuleTip: "Make content words clearer, shorten function words, and pause by meaning rather than after every word."
   },
@@ -269,6 +277,10 @@ window.FLOW_I18N = {
     showMore: "Mostrar mais ({count} restantes)",
     allShown: "Todas as {count} frases foram exibidas",
     directoryRank: "Utilidade #{rank}",
+    flowTitle: "Caminho de fala desta frase",
+    flowListen: "Ouvir a voz real",
+    flowShadow: "Repetir a frase inteira",
+    flowLink: "Separar as ligações",
     defaultRuleName: "Acento frasal e grupos de sentido",
     defaultRuleTip: "Destaque as palavras de conteúdo, reduza as palavras funcionais e faça pausas pelo sentido, não após cada palavra."
   },
@@ -360,6 +372,10 @@ window.FLOW_I18N = {
     showMore: "さらに表示（残り{count}文）",
     allShown: "{count}文すべてを表示しています",
     directoryRank: "実用性 #{rank}",
+    flowTitle: "この文の音の流れ",
+    flowListen: "実際の音声を聞く",
+    flowShadow: "文全体をまねして話す",
+    flowLink: "音のつながりを分解する",
     defaultRuleName: "文の強勢と意味のまとまり",
     defaultRuleTip: "内容語を明確に、機能語を短く発音し、単語ごとではなく意味のまとまりで区切ります。"
   },
@@ -451,6 +467,10 @@ window.FLOW_I18N = {
     showMore: "더 보기 (남은 문장 {count}개)",
     allShown: "문장 {count}개를 모두 표시했습니다",
     directoryRank: "실용성 #{rank}",
+    flowTitle: "이 문장의 소리 흐름",
+    flowListen: "실제 음성 듣기",
+    flowShadow: "문장 전체 따라 읽기",
+    flowLink: "연음 분해하기",
     defaultRuleName: "문장 강세와 의미 단위",
     defaultRuleTip: "내용어는 더 분명하게, 기능어는 짧게 말하고 단어마다가 아니라 의미 단위로 끊어 읽으세요."
   }
