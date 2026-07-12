@@ -18,7 +18,7 @@
     ja: "translations-ja.js",
     ko: "translations-ko.js"
   };
-  const assetRevision = "20260712-intro";
+  const assetRevision = "20260712-notebook";
   const translationLoads = {};
 
   const normalizeLocale = value => {
@@ -644,6 +644,25 @@
     $("languageSelect").value = locale;
   }
 
+  function humanizeCopy() {
+    const introKicker = document.querySelector(".intro-kicker");
+    if (introKicker) {
+      introKicker.dataset.i18n = "introKicker";
+      introKicker.textContent = t("introKicker");
+    }
+    const eyebrow = document.querySelector(".eyebrow");
+    if (eyebrow) {
+      eyebrow.dataset.i18n = "heroEyebrow";
+      eyebrow.textContent = t("heroEyebrow");
+    }
+    const practiceLabel = document.querySelector(".ai-chip");
+    if (practiceLabel) {
+      practiceLabel.className = "practice-chip";
+      practiceLabel.dataset.i18n = "shadowLabel";
+      practiceLabel.textContent = t("shadowLabel");
+    }
+  }
+
   function initIntro() {
     const intro = $("intro");
     if (!intro) return;
@@ -746,6 +765,7 @@
 
   $("totalMetric").textContent = number(library.length);
   await ensureTranslations(locale);
+  humanizeCopy();
   localizeStatic();
   initIntro();
   renderFilters();
