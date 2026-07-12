@@ -100,30 +100,55 @@
   const zoneLabel = id => zoneLabels[locale]?.[id] || zoneLabels.en[id] || id;
   const categoryLabel = value => categoryLabels[locale]?.[value] || categoryLabels.en[value] || t("everydayEnglish");
 
-  const score = (item, targetZone) => {
+  const termRelevance = (item, targetZone) => {
     const haystack = `${item.e} ${item.m} ${item.c}`.toLowerCase();
-    return targetZone.words.reduce((total, word) => total + (haystack.includes(word) ? 5 : 0), 0)
-      + (item.c === "请求帮助" && targetZone.id === "help" ? 9 : 0)
+    return targetZone ? targetZone.words.reduce((total, word) => total + (haystack.includes(word) ? 5 : 0), 0) : 0;
+  };
+  const score = (item, targetZone) => {
+    const relevance = termRelevance(item, targetZone);
+    return relevance
+      + (item.c === "请求帮助" && targetZone?.id === "help" ? 9 : 0)
       + (item.c === "日常交流" ? 1 : 0);
   };
 
-  const unused = new Set(library.map((_, index) => index));
+  const categoryPriority = { "请求帮助": 22, "紧急求助": 21, "日常交流": 20, "出行问路": 18, "购物餐饮": 17, "租房居住": 17, "银行支付": 16, "医疗健康": 16, "工作沟通": 14, "学习教育": 12, "恋爱社交": 11, "社交开场": 10 };
+  const practicalPhrases = ["thank you", "excuse me", "how are you", "i need", "i want", "can i", "could you", "do you", "is there", "where is", "how much", "help me", "please", "i'm looking", "i would like", "can you"];
+  const zoneCategories = { social: ["恋爱社交", "社交开场"], travel: ["出行问路"], food: ["购物餐饮"], work: ["工作沟通", "学习教育"], housing: ["租房居住"], health: ["医疗健康", "紧急求助"], banking: ["银行支付"], help: ["请求帮助", "日常交流"] };
+  const practicalScore = (item, targetZone) => {
+    const text = item.e.toLowerCase().trim();
+    const words = text.match(/[a-z']+/g) || [];
+    let value = score(item, targetZone) * 6 + (categoryPriority[item.c] || 0);
+    for (const phrase of practicalPhrases) if (text.includes(phrase)) value += 36;
+    if (/\b(i|you|we)\b/.test(text)) value += 18;
+    if (/\b(i need|i want|i have|can you|could you|can i|could i|where is|where are|how much|how do i|do you|is there|i'm looking|please|help)\b/.test(text)) value += 24;
+    if (/^(what|where|when|why|how|can|could|would|do|is|are)\b/.test(text)) value += 14;
+    if (/[?]/.test(text)) value += 9;
+    if (words.length >= 2 && words.length <= 8) value += 34;
+    else if (words.length <= 12) value += 17;
+    else if (words.length > 18) value -= Math.min(28, words.length - 18);
+    if (/^(more and more|this |that |the |there )/.test(text) || /\b(has begun|have begun|used to|people say)\b/.test(text)) value -= 22;
+    return value;
+  };
+
   const zonePools = {};
   const itemZones = new Map();
   zones.forEach(targetZone => {
-    const ranked = [...unused].sort((a, b) => score(library[b], targetZone) - score(library[a], targetZone));
+    const isRelevant = item => termRelevance(item, targetZone) > 0 || zoneCategories[targetZone.id].includes(item.c);
+    const ranked = [...library].sort((first, second) => Number(isRelevant(second)) - Number(isRelevant(first)) || practicalScore(second, targetZone) - practicalScore(first, targetZone) || first.e.localeCompare(second.e));
     const picked = ranked.slice(0, 850);
-    picked.forEach(index => {
-      unused.delete(index);
-      itemZones.set(String(library[index].id), targetZone.id);
+    picked.forEach(item => {
+      if (!itemZones.has(String(item.id))) itemZones.set(String(item.id), targetZone.id);
     });
-    zonePools[targetZone.id] = picked.map(index => library[index]);
+    zonePools[targetZone.id] = picked;
   });
+  const allPool = [...library].sort((first, second) => practicalScore(second) - practicalScore(first) || first.e.localeCompare(second.e));
 
   let zone = "all";
   let query = "";
   let index = 0;
   let blind = false;
+  let catalogOpen = false;
+  let catalogLimit = 60;
   let currentItem = null;
   let mediaRecorder = null;
   let mediaStream = null;
@@ -144,7 +169,7 @@
     const haystack = `${item.e} ${item.m} ${meaningFor(item)} ${item.c} ${categoryLabel(item.c)} ${itemZone ? zoneLabel(itemZone) : ""}`.toLowerCase();
     return haystack.includes(query.toLowerCase());
   };
-  const pool = () => (zone === "all" ? library : zonePools[zone]).filter(matches);
+  const pool = () => (zone === "all" ? allPool : zonePools[zone]).filter(matches);
   const chunks = text => {
     const words = text.match(/[^\s]+/g) || [];
     const groups = [];
@@ -239,6 +264,7 @@
       button.onclick = () => {
         zone = button.dataset.zone;
         index = 0;
+        catalogLimit = 60;
         renderFilters();
         render();
       };
@@ -251,11 +277,37 @@
       button.onclick = () => {
         zone = button.dataset.zone;
         index = 0;
+        catalogOpen = true;
+        catalogLimit = 60;
         renderFilters();
         render();
         showLab();
       };
     });
+  }
+
+  function renderCatalog() {
+    const catalog = $("catalog");
+    const toggle = $("toggleCatalog");
+    catalog.hidden = !catalogOpen;
+    toggle.textContent = t(catalogOpen ? "directoryClose" : "directoryOpen");
+    toggle.setAttribute("aria-expanded", String(catalogOpen));
+    if (!catalogOpen) return;
+    const items = pool();
+    const visibleItems = items.slice(0, catalogLimit);
+    $("catalogList").innerHTML = visibleItems.map((item, itemIndex) => `<button class="catalog-row ${item.id === currentItem?.id ? "active" : ""}" type="button" data-catalog-index="${itemIndex}"><span class="catalog-rank">${esc(t("directoryRank", { rank: number(itemIndex + 1) }))}</span><span><span class="catalog-english">${esc(item.e)}</span><span class="catalog-meaning">${esc(meaningFor(item))}</span></span></button>`).join("");
+    document.querySelectorAll(".catalog-row").forEach(button => {
+      button.onclick = () => {
+        index = Number(button.dataset.catalogIndex);
+        render();
+        document.querySelector(".practice").scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+    });
+    const remaining = Math.max(0, items.length - visibleItems.length);
+    $("catalogMore").hidden = remaining === 0;
+    $("catalogMore").textContent = t("showMore", { count: number(remaining) });
+    $("catalogAll").hidden = remaining !== 0;
+    $("catalogAll").textContent = t("allShown", { count: number(items.length) });
   }
 
   function setBlind(value) {
@@ -515,6 +567,7 @@
       $("translation").textContent = t("noResultsExample");
       $("chunks").innerHTML = "";
       $("sentenceRules").innerHTML = "";
+      renderCatalog();
       return;
     }
 
@@ -542,6 +595,7 @@
     audio.load();
     warm(items);
     setBlind(blind);
+    renderCatalog();
   }
 
   function renderRules() {
@@ -619,6 +673,15 @@
   $("clear").onclick = () => { $("search").value = ""; query = ""; index = 0; render(); };
   $("next").onclick = () => { const items = pool(); if (items.length) { index = (index + 1) % items.length; render(); } };
   $("blind").onclick = () => setBlind(!blind);
+  $("toggleCatalog").onclick = () => {
+    catalogOpen = !catalogOpen;
+    catalogLimit = 60;
+    renderCatalog();
+  };
+  $("catalogMore").onclick = () => {
+    catalogLimit += 60;
+    renderCatalog();
+  };
   $("startShadow").onclick = () => startShadowPractice();
   $("stopShadow").onclick = () => stopShadowPractice();
   $("playShadow").onclick = () => {
